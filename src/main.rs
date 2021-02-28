@@ -1,22 +1,49 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use clap::Clap;
 use csv;
 use rust_decimal::prelude::*;
-use serde::Serialize;
-use std::error::Error;
+use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::io;
-use std::{collections::HashMap, convert::TryFrom};
 
-pub mod account;
-pub mod transaction;
-
-use account::Account;
-use transaction::{Repo, Transaction, TransactionCommand};
+use payments::payments::PaymentsEngine;
+use payments::transactions::{Transaction, TransactionKind};
 
 #[derive(Clap)]
 #[clap(version = "0.1.0", author = "Vance Longwill <vancelongwill@gmail.com>")]
 struct Opts {
     file: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TransactionCommand {
+    #[serde(flatten)]
+    pub kind: TransactionKind,
+    pub tx: u32,
+    pub client: u16,
+}
+
+impl TryFrom<TransactionCommand> for Transaction {
+    type Error = anyhow::Error;
+    fn try_from(
+        TransactionCommand { kind, tx, client }: TransactionCommand,
+    ) -> Result<Transaction> {
+        match kind {
+            TransactionKind::Deposit { amount } | TransactionKind::Withdrawal { amount } => {
+                Ok(Transaction {
+                    tx,
+                    amount,
+                    kind,
+                    client,
+                })
+            }
+            _ => {
+                return Err(anyhow!(
+                    "transactions must start with a deposit or withdrawal"
+                ))
+            }
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -26,34 +53,6 @@ struct AccountStatement {
     held: Decimal,
     total: Decimal,
     locked: bool,
-}
-
-struct PaymentsEngine {
-    store: Repo,
-    accounts: HashMap<u16, Account>,
-}
-
-impl PaymentsEngine {
-    fn new() -> PaymentsEngine {
-        PaymentsEngine {
-            store: Repo::new(),
-            accounts: HashMap::new(),
-        }
-    }
-    fn process_transaction(&mut self, t: Transaction) -> Result<()> {
-        let transaction = if let Some(prev) = self.store.get(t.tx) {
-            prev.next(t.kind)?
-        } else {
-            t
-        };
-        let acc = self
-            .accounts
-            .entry(transaction.client)
-            .or_insert(Account::new());
-        acc.apply(transaction)?;
-        self.store.save(transaction);
-        Ok(())
-    }
 }
 
 fn run() -> Result<()> {

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use rust_decimal::prelude::*;
 use serde::Serialize;
 
-use crate::transaction::{Transaction, TransactionKind};
+use crate::transactions::{Transaction, TransactionKind};
 
 #[derive(PartialEq, Debug, Clone)]
 enum LockedStatus {

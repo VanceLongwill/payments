@@ -2,15 +2,6 @@ use anyhow::{anyhow, Result};
 use rust_decimal::prelude::*;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::convert::TryFrom;
-
-#[derive(Debug, Deserialize)]
-pub struct TransactionCommand {
-    #[serde(flatten)]
-    pub kind: TransactionKind,
-    pub tx: u32,
-    pub client: u16,
-}
 
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase", tag = "type")]
@@ -28,29 +19,6 @@ pub struct Transaction {
     pub amount: Decimal,
     pub kind: TransactionKind,
     pub client: u16,
-}
-
-impl TryFrom<TransactionCommand> for Transaction {
-    type Error = anyhow::Error;
-    fn try_from(
-        TransactionCommand { kind, tx, client }: TransactionCommand,
-    ) -> Result<Transaction> {
-        match kind {
-            TransactionKind::Deposit { amount } | TransactionKind::Withdrawal { amount } => {
-                Ok(Transaction {
-                    tx,
-                    amount,
-                    kind,
-                    client,
-                })
-            }
-            _ => {
-                return Err(anyhow!(
-                    "transactions must start with a deposit or withdrawal"
-                ))
-            }
-        }
-    }
 }
 
 impl Transaction {
