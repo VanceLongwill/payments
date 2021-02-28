@@ -12,3 +12,4 @@ rust_decimal = "1.10.3"
 serde = { version = "1", features = ["derive"] }
 csv = "1.1"
 anyhow = "1.0"
+thiserror = "1.0"

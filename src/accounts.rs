@@ -1,25 +1,19 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use rust_decimal::prelude::*;
-use serde::Serialize;
+use thiserror::Error;
 
 use crate::transactions::{Transaction, TransactionKind};
+
+#[derive(Error, Debug)]
+pub enum AccountError {
+    #[error("insufficient funds")]
+    InsufficientFunds,
+}
 
 #[derive(PartialEq, Debug, Clone)]
 enum LockedStatus {
     Locked,
     Unlocked,
-}
-
-impl Serialize for LockedStatus {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_bool(match self {
-            LockedStatus::Locked => true,
-            LockedStatus::Unlocked => false,
-        })
-    }
 }
 
 #[derive(Debug)]
@@ -49,9 +43,12 @@ impl Account {
     pub fn is_locked(&self) -> bool {
         self.locked == LockedStatus::Locked
     }
-    pub fn apply(&mut self, Transaction { kind, amount, .. }: Transaction) -> Result<()> {
+    pub fn apply(
+        &mut self,
+        Transaction { kind, amount, .. }: Transaction,
+    ) -> Result<(), AccountError> {
         if self.is_locked() {
-            return Err(anyhow!("account is locked"));
+            return Err(AccountError::InsufficientFunds);
         }
         match kind {
             TransactionKind::Deposit { .. } => {
@@ -60,7 +57,7 @@ impl Account {
             }
             TransactionKind::Withdrawal { .. } => {
                 if self.available - amount < Decimal::from(0) {
-                    return Err(anyhow!("insufficient funds"));
+                    return Err(AccountError::InsufficientFunds.into());
                 }
                 self.available = self.available - amount;
                 Ok(())
@@ -77,10 +74,111 @@ impl Account {
             }
             TransactionKind::ChargeBack => {
                 self.held = self.held - amount;
-                self.available = self.available - amount;
                 self.locked = LockedStatus::Locked;
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_deposit() -> Result<()> {
+        let mut acc = Account::new();
+        acc.available = Decimal::from(8);
+        let amount = Decimal::from(7);
+        acc.apply(Transaction {
+            tx: 1,
+            client: 2,
+            kind: TransactionKind::Deposit { amount },
+            amount,
+        })?;
+        assert_eq!(acc.available(), Decimal::from(15));
+        Ok(())
+    }
+
+    #[test]
+    fn test_apply_withdrawal() -> Result<()> {
+        let mut acc = Account::new();
+        acc.available = Decimal::from(8);
+        let amount = Decimal::from(7);
+        acc.apply(Transaction {
+            tx: 1,
+            client: 2,
+            kind: TransactionKind::Withdrawal { amount },
+            amount,
+        })?;
+        assert_eq!(acc.available(), Decimal::from(1));
+        Ok(())
+    }
+
+    #[test]
+    fn test_apply_withdrawal_insufficient_funds() -> Result<()> {
+        let mut acc = Account::new();
+        acc.available = Decimal::from(8);
+        let amount = Decimal::from(10);
+        assert!(acc
+            .apply(Transaction {
+                tx: 1,
+                client: 2,
+                kind: TransactionKind::Withdrawal { amount },
+                amount,
+            })
+            .is_err());
+        assert_eq!(acc.available(), Decimal::from(8));
+        Ok(())
+    }
+
+    #[test]
+    fn test_apply_dispute() -> Result<()> {
+        let mut acc = Account::new();
+        acc.available = Decimal::from(8);
+        let amount = Decimal::from(7);
+        acc.apply(Transaction {
+            tx: 1,
+            client: 2,
+            kind: TransactionKind::Dispute,
+            amount,
+        })?;
+        assert_eq!(acc.available(), Decimal::from(1));
+        assert_eq!(acc.held(), Decimal::from(amount));
+        Ok(())
+    }
+
+    #[test]
+    fn test_apply_resolve() -> Result<()> {
+        let mut acc = Account::new();
+        acc.held = Decimal::from(7);
+        acc.available = Decimal::from(1);
+        let amount = Decimal::from(7);
+        acc.apply(Transaction {
+            tx: 1,
+            client: 2,
+            kind: TransactionKind::Resolve,
+            amount,
+        })?;
+        assert_eq!(acc.available(), Decimal::from(8));
+        assert_eq!(acc.held(), Decimal::from(0));
+        Ok(())
+    }
+
+    #[test]
+    fn test_apply_chargeback() -> Result<()> {
+        let mut acc = Account::new();
+        acc.held = Decimal::from(7);
+        acc.available = Decimal::from(1);
+        let amount = Decimal::from(2);
+        acc.apply(Transaction {
+            tx: 1,
+            client: 2,
+            kind: TransactionKind::ChargeBack,
+            amount,
+        })?;
+        assert_eq!(acc.available(), Decimal::from(1));
+        assert_eq!(acc.held(), Decimal::from(5));
+        Ok(())
     }
 }
