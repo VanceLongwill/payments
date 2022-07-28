@@ -1,3 +1,5 @@
+extern crate proc_macro;
+
 use anyhow::Result;
 use clap::Clap;
 use csv;
@@ -5,8 +7,12 @@ use rust_decimal::prelude::*;
 use serde::Serialize;
 use std::io;
 
-use payments::payments::PaymentsEngine;
-use payments::transactions::{MemoryRepo, TransactionCommand};
+mod payments;
+mod transactions;
+mod accounts;
+
+use payments::PaymentsEngine;
+use transactions::{MemoryRepo, TransactionCommand};
 
 #[derive(Clap)]
 #[clap(version = "0.1.0", author = "Vance Longwill <vancelongwill@gmail.com>")]
@@ -26,7 +32,8 @@ struct AccountStatement {
 fn run() -> Result<()> {
     let opts: Opts = Opts::parse();
     let mut reader = csv::Reader::from_path(opts.file)?;
-    let mut engine = PaymentsEngine::new(Box::new(MemoryRepo::new()));
+    let repo = MemoryRepo::new();
+    let mut engine = PaymentsEngine::new(&repo);
     for result in reader.deserialize() {
         let command: TransactionCommand = result?;
         if let Err(_e) = engine.process_transaction(command) {

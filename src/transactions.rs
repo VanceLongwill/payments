@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
@@ -65,7 +66,7 @@ pub struct Transaction {
 }
 
 impl Transaction {
-    pub fn next(&self, kind: TransactionKind) -> Result<Transaction> {
+    pub fn apply(&self, kind: TransactionKind) -> Result<Transaction> {
         match (self.kind, kind) {
             (TransactionKind::Deposit { amount }, TransactionKind::Dispute)
             | (TransactionKind::Withdrawal { amount }, TransactionKind::Dispute) => {
@@ -100,35 +101,37 @@ impl Transaction {
 }
 
 pub struct MemoryRepo {
-    data: HashMap<u32, Transaction>,
+    data: RefCell<HashMap<u32, Transaction>>,
 }
 
 impl MemoryRepo {
     pub fn new() -> MemoryRepo {
         MemoryRepo {
-            data: HashMap::new(),
+            data: RefCell::new(HashMap::new()),
         }
     }
-    pub fn get_by_client(&self, client: u16) -> Vec<&Transaction> {
+    pub fn get_by_client(&self, client: u16) -> Vec<Transaction> {
         self.data
+            .borrow()
             .iter()
             .map(|(_, transaction)| transaction)
             .filter(|transaction| transaction.client == client)
+            .cloned()
             .collect()
     }
 }
 
 pub trait TransactionsRepo {
-    fn get(&self, id: u32) -> Result<Option<&Transaction>>;
-    fn save(&mut self, transaction: Transaction) -> Result<u32>;
+    fn get(&self, id: u32) -> Result<Option<Transaction>>;
+    fn save(&self, transaction: Transaction) -> Result<u32>;
 }
 
 impl TransactionsRepo for MemoryRepo {
-    fn get(&self, id: u32) -> Result<Option<&Transaction>> {
-        Ok(self.data.get(&id))
+    fn get(&self, id: u32) -> Result<Option<Transaction>> {
+        Ok(self.data.borrow().get(&id).cloned())
     }
-    fn save(&mut self, transaction: Transaction) -> Result<u32> {
-        self.data.insert(transaction.tx, transaction);
+    fn save(&self, transaction: Transaction) -> Result<u32> {
+        self.data.borrow_mut().insert(transaction.tx, transaction);
         Ok(transaction.tx)
     }
 }
