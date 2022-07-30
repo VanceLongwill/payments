@@ -8,6 +8,8 @@ use crate::transactions::{Transaction, TransactionKind};
 pub enum AccountError {
     #[error("insufficient funds")]
     InsufficientFunds,
+    #[error("client ID mismatch")]
+    InvalidClient,
 }
 
 #[derive(PartialEq, Debug, Clone)]
@@ -54,7 +56,9 @@ impl Account {
             ..
         }: Transaction,
     ) -> Result<(), AccountError> {
-        if self.client != client {}
+        if self.client != client {
+            return Err(AccountError::InvalidClient);
+        }
         if self.is_locked() {
             return Err(AccountError::InsufficientFunds);
         }
