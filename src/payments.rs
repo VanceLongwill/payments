@@ -19,15 +19,14 @@ impl<'a> PaymentsEngine<'a> {
         }
     }
     pub fn process_transaction(&mut self, t: TransactionCommand) -> Result<()> {
-        let transaction = if let Some(prev) = self.transactions.get(t.tx)? {
-            prev.apply(t.kind)?
-        } else {
-            Transaction::try_from(t)?
+        let transaction = match self.transactions.get(t.tx)? {
+            Some(prev) => prev.apply(t.kind)?,
+            None => Transaction::try_from(t)?,
         };
         let acc = self
             .accounts
             .entry(transaction.client)
-            .or_insert(Account::new());
+            .or_insert(Account::new(transaction.client));
         acc.apply(transaction)?;
         self.transactions.save(transaction)?;
         Ok(())

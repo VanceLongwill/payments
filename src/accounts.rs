@@ -18,14 +18,16 @@ enum LockedStatus {
 
 #[derive(Debug)]
 pub struct Account {
+    client: u16,
     available: Decimal,
     held: Decimal,
     locked: LockedStatus,
 }
 
 impl Account {
-    pub fn new() -> Account {
+    pub fn new(client: u16) -> Account {
         Account {
+            client,
             available: Decimal::from(0),
             held: Decimal::from(0),
             locked: LockedStatus::Unlocked,
@@ -45,8 +47,14 @@ impl Account {
     }
     pub fn apply(
         &mut self,
-        Transaction { kind, amount, .. }: Transaction,
+        Transaction {
+            kind,
+            amount,
+            client,
+            ..
+        }: Transaction,
     ) -> Result<(), AccountError> {
+        if self.client != client {}
         if self.is_locked() {
             return Err(AccountError::InsufficientFunds);
         }
@@ -87,7 +95,7 @@ mod tests {
 
     #[test]
     fn test_apply_deposit() -> Result<()> {
-        let mut acc = Account::new();
+        let mut acc = Account::new(1);
         acc.available = Decimal::from(8);
         let amount = Decimal::from(7);
         acc.apply(Transaction {
@@ -102,7 +110,7 @@ mod tests {
 
     #[test]
     fn test_apply_withdrawal() -> Result<()> {
-        let mut acc = Account::new();
+        let mut acc = Account::new(1);
         acc.available = Decimal::from(8);
         let amount = Decimal::from(7);
         acc.apply(Transaction {
@@ -117,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_apply_withdrawal_insufficient_funds() -> Result<()> {
-        let mut acc = Account::new();
+        let mut acc = Account::new(1);
         acc.available = Decimal::from(8);
         let amount = Decimal::from(10);
         assert!(acc
@@ -134,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_apply_dispute() -> Result<()> {
-        let mut acc = Account::new();
+        let mut acc = Account::new(1);
         acc.available = Decimal::from(8);
         let amount = Decimal::from(7);
         acc.apply(Transaction {
@@ -150,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_apply_resolve() -> Result<()> {
-        let mut acc = Account::new();
+        let mut acc = Account::new(1);
         acc.held = Decimal::from(7);
         acc.available = Decimal::from(1);
         let amount = Decimal::from(7);
@@ -167,7 +175,7 @@ mod tests {
 
     #[test]
     fn test_apply_chargeback() -> Result<()> {
-        let mut acc = Account::new();
+        let mut acc = Account::new(1);
         acc.held = Decimal::from(7);
         acc.available = Decimal::from(1);
         let amount = Decimal::from(2);
