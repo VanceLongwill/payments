@@ -7,7 +7,6 @@ use crate::transactions::{Transaction, TransactionCommand, TransactionsRepo};
 
 pub struct PaymentsEngine<'a> {
     transactions: &'a dyn TransactionsRepo,
-    // @TODO: use a trait for the accounts repo
     pub accounts: HashMap<u16, Account>,
 }
 
@@ -20,14 +19,20 @@ impl<'a> PaymentsEngine<'a> {
     }
     pub fn process_transaction(&mut self, t: TransactionCommand) -> Result<()> {
         let transaction = match self.transactions.get(t.tx)? {
-            Some(prev) => prev.apply(t.kind)?,
+            Some(prev) => prev.apply(t)?,
             None => Transaction::try_from(t)?,
         };
-        let acc = self
-            .accounts
-            .entry(transaction.client)
-            .or_insert(Account::new(transaction.client));
-        acc.apply(transaction)?;
+
+        match self.accounts.get_mut(&transaction.client) {
+            Some(acc) => {
+                acc.apply(transaction)?;
+            }
+            None => {
+                self.accounts
+                    .insert(transaction.client, Account::new(transaction)?);
+            }
+        };
+
         self.transactions.save(transaction)?;
         Ok(())
     }
@@ -50,7 +55,7 @@ mod tests {
             tx: 1,
             client: 1,
         };
-        engine.process_transaction(command.clone())?;
+        engine.process_transaction(command)?;
         Ok(())
     }
 }
