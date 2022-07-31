@@ -6,13 +6,15 @@ use csv;
 use rust_decimal::prelude::*;
 use serde::Serialize;
 use std::io;
+use tracing::{debug, error};
+use tracing_subscriber;
 
+mod accounts;
 mod payments;
 mod transactions;
-mod accounts;
 
 use payments::PaymentsEngine;
-use transactions::{MemoryRepo, TransactionCommand};
+use transactions::MemoryRepo;
 
 #[derive(Clap)]
 #[clap(version = "0.1.0", author = "Vance Longwill <vancelongwill@gmail.com>")]
@@ -31,14 +33,25 @@ struct AccountStatement {
 
 fn run() -> Result<()> {
     let opts: Opts = Opts::parse();
+
     let mut reader = csv::Reader::from_path(opts.file)?;
     let repo = MemoryRepo::new();
     let mut engine = PaymentsEngine::new(&repo);
+
     for result in reader.deserialize() {
-        let command: TransactionCommand = result?;
-        if let Err(_e) = engine.process_transaction(command) {
-            // println!("Unable to process transaction: {:?}", e);
-            // println!("{:?}", transaction);
+        let command = result?;
+        match engine.process_transaction(command) {
+            Ok(()) => debug!(
+                tx = command.tx,
+                client = command.client,
+                "Processed transaction"
+            ),
+            Err(e) => debug!(
+                error = e.to_string(),
+                tx = command.tx,
+                client = command.client,
+                "Unable to process transaction"
+            ),
         }
     }
 
@@ -58,7 +71,9 @@ fn run() -> Result<()> {
 }
 
 fn main() {
+    tracing_subscriber::fmt::init();
+
     if let Err(e) = run() {
-        println!("Something went wrong: {:?}", e)
+        error!(error = e.to_string(), "Something went wrong")
     }
 }
