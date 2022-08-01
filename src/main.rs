@@ -13,9 +13,9 @@ mod accounts;
 mod payments;
 mod transactions;
 
-use accounts::MemoryRepo as AccountsRepo;
+use accounts::{AccountsRepo, MemoryRepo as AccountsMemoryRepo};
 use payments::PaymentsEngine;
-use transactions::MemoryRepo as TransactionsRepo;
+use transactions::MemoryRepo as TransactionsMemoryRepo;
 
 #[derive(Clap)]
 #[clap(version = "0.1.0", author = "Vance Longwill <vancelongwill@gmail.com>")]
@@ -36,14 +36,16 @@ fn run() -> Result<()> {
     let opts: Opts = Opts::parse();
 
     let mut reader = csv::Reader::from_path(opts.file)?;
-    // @TODO: as we scale, the in-memory transactions repo might no longer be suitable due to
+    // @TODO: as we scale, the in-memory repositories might no longer be suitable due to
     // memory constraints & cold start (loading all transactions that ever occurred into memory
-    // from CSV).
+    // from CSV vs snapshotting the state at a known point in time).
     //
-    // To mitigate this, the in-memory TransactionsRepo could be swapped out one with a higher
-    // capacity & more durable storage backend such as sqlite, redis, postgres or dynamodb.
-    let transactions_repo = TransactionsRepo::new();
-    let accounts_repo = AccountsRepo::new();
+    // To mitigate this, the in-memory implementations can be easily swapped out for ones
+    // utilising a db with a higher capacity & more durable storage backend (e.g. sqlite, redis, postgres or dynamodb).
+    // Migrating to one of the above storage backends is as simple as implementing the
+    // AccountsRepo/TransactionsRepo traits respectively.
+    let transactions_repo = TransactionsMemoryRepo::new();
+    let accounts_repo = AccountsMemoryRepo::new();
     let mut engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
 
     for result in reader.deserialize() {
@@ -64,7 +66,7 @@ fn run() -> Result<()> {
     }
 
     let mut writer = csv::Writer::from_writer(io::stdout());
-    for acc in engine.accounts.get_all()? {
+    for acc in accounts_repo.get_all()? {
         writer.serialize(AccountStatement {
             client: acc.client(),
             available: acc.available(),

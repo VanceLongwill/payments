@@ -60,50 +60,52 @@ impl Account {
         self.locked == LockedStatus::Locked
     }
     pub fn apply(
-        &mut self,
+        &self,
         Transaction {
             kind,
             amount,
             client,
             ..
         }: Transaction,
-    ) -> Result<(), AccountError> {
+    ) -> Result<Account, AccountError> {
         if self.client != client {
             return Err(AccountError::InvalidClient);
         }
         if self.is_locked() {
             return Err(AccountError::InsufficientFunds);
         }
+        // avoid mutating the account directly
+        let mut acc = self.clone();
         match kind {
             TransactionKind::Deposit { .. } => {
-                self.available = self.available + amount;
-                Ok(())
+                acc.available = acc.available + amount;
+                Ok(acc)
             }
             TransactionKind::Withdrawal { .. } => {
-                let available = self.available - amount;
+                let available = acc.available - amount;
                 if available < Decimal::from(0) {
                     return Err(AccountError::InsufficientFunds.into());
                 }
-                self.available = available;
-                Ok(())
+                acc.available = available;
+                Ok(acc)
             }
             // @TODO: should dispute, resolve & chargeback transactions error when:
             //      a) the resulting available balance would be negative
             //      b) the resulting held balance would be negative ?
             TransactionKind::Dispute => {
-                self.available = self.available - amount;
-                self.held = self.held + amount;
-                Ok(())
+                acc.available = acc.available - amount;
+                acc.held = acc.held + amount;
+                Ok(acc)
             }
             TransactionKind::Resolve => {
-                self.held = self.held - amount;
-                self.available = self.available + amount;
-                Ok(())
+                acc.held = acc.held - amount;
+                acc.available = acc.available + amount;
+                Ok(acc)
             }
             TransactionKind::ChargeBack => {
-                self.held = self.held - amount;
-                self.locked = LockedStatus::Locked;
-                Ok(())
+                acc.held = acc.held - amount;
+                acc.locked = LockedStatus::Locked;
+                Ok(acc)
             }
         }
     }
@@ -173,9 +175,9 @@ mod tests {
             },
             client: 1,
         })?;
-        let mut acc = Account::new(transaction)?;
+        let acc = Account::new(transaction)?;
         let amount = Decimal::from(7);
-        acc.apply(Transaction {
+        let acc = acc.apply(Transaction {
             client: acc.client,
             tx: 1,
             kind: TransactionKind::Deposit { amount },
@@ -197,7 +199,7 @@ mod tests {
         let mut acc = Account::new(transaction)?;
         acc.available = Decimal::from(8);
         let amount = Decimal::from(7);
-        acc.apply(Transaction {
+        let acc = acc.apply(Transaction {
             tx: 1,
             client: acc.client,
             kind: TransactionKind::Withdrawal { amount },
@@ -243,7 +245,7 @@ mod tests {
         let mut acc = Account::new(transaction)?;
         acc.available = Decimal::from(8);
         let amount = Decimal::from(7);
-        acc.apply(Transaction {
+        let acc = acc.apply(Transaction {
             tx: 1,
             client: acc.client,
             kind: TransactionKind::Dispute,
@@ -267,7 +269,7 @@ mod tests {
         acc.held = Decimal::from(7);
         acc.available = Decimal::from(1);
         let amount = Decimal::from(7);
-        acc.apply(Transaction {
+        let acc = acc.apply(Transaction {
             tx: 1,
             client: acc.client,
             kind: TransactionKind::Resolve,
@@ -291,7 +293,7 @@ mod tests {
         acc.held = Decimal::from(7);
         acc.available = Decimal::from(1);
         let amount = Decimal::from(2);
-        acc.apply(Transaction {
+        let acc = acc.apply(Transaction {
             tx: 1,
             client: acc.client,
             kind: TransactionKind::ChargeBack,
@@ -323,7 +325,6 @@ mod tests {
         });
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), AccountError::InsufficientFunds);
-        assert_eq!(acc.available(), Decimal::from(100));
         Ok(())
     }
 
@@ -336,7 +337,7 @@ mod tests {
             },
             client: 1,
         })?;
-        let mut acc = Account::new(transaction)?;
+        let acc = Account::new(transaction)?;
         let amount = Decimal::from(10);
         let res = acc.apply(Transaction {
             tx: 1,
@@ -346,7 +347,6 @@ mod tests {
         });
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), AccountError::InvalidClient);
-        assert_eq!(acc.available(), Decimal::from(100));
         Ok(())
     }
 }

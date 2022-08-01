@@ -6,10 +6,7 @@ use crate::transactions::{Transaction, TransactionCommand, TransactionsRepo};
 
 pub struct PaymentsEngine<'a, 'b> {
     transactions: &'a dyn TransactionsRepo,
-    // @TODO: accounts in-memory hashmap could be replaced with an AccountsRepo backed by a
-    // more durable & higher capacity storage backend with support for a high volume of writes
-    // (such as sqlite, redis, or postgres).
-    pub accounts: &'b dyn AccountsRepo,
+    accounts: &'b dyn AccountsRepo,
 }
 
 impl<'a, 'b> PaymentsEngine<'a, 'b> {
@@ -22,22 +19,22 @@ impl<'a, 'b> PaymentsEngine<'a, 'b> {
             accounts,
         }
     }
+    /// process_transaction attempts to create a transaction event and apply that transaction to
+    /// the client account it references
     pub fn process_transaction(&mut self, t: TransactionCommand) -> Result<()> {
         let transaction = match self.transactions.get(t.tx)? {
             Some(prev) => prev.apply(t)?,
             None => Transaction::try_from(t)?,
         };
 
-        match self.accounts.get(transaction.client)? {
-            Some(mut acc) => {
-                acc.apply(transaction)?;
-            }
-            None => {
-                self.accounts.save(Account::new(transaction)?)?;
-            }
+        let updated = match self.accounts.get(transaction.client)? {
+            Some(acc) => acc.apply(transaction)?,
+            None => Account::new(transaction)?,
         };
 
+        self.accounts.save(updated)?;
         self.transactions.save(transaction)?;
+
         Ok(())
     }
 }
