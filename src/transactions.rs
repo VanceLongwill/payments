@@ -15,11 +15,11 @@ pub enum TransactionError {
         to: TransactionKind,
     },
     #[error("unable to apply transaction belonging to a different client: expected {expected:?} got {got:?}")]
-    InvalidClient { expected: u16, got: u16 },
+    UnexpectedClient { expected: u16, got: u16 },
     #[error(
         "unable to apply transaction with mismatching tx id: expected {expected:?} got {got:?}"
     )]
-    InvalidTx { expected: u32, got: u32 },
+    UnexpectedTx { expected: u32, got: u32 },
 }
 
 /// TransactionCommand represents the minimum fields required for a transaction to be processed.
@@ -83,13 +83,13 @@ impl Transaction {
         TransactionCommand { client, kind, tx }: TransactionCommand,
     ) -> Result<Transaction, TransactionError> {
         if self.tx != tx {
-            return Err(TransactionError::InvalidTx {
+            return Err(TransactionError::UnexpectedTx {
                 expected: self.tx,
                 got: tx,
             });
         }
         if self.client != client {
-            return Err(TransactionError::InvalidClient {
+            return Err(TransactionError::UnexpectedClient {
                 expected: self.client,
                 got: client,
             });
@@ -188,7 +188,7 @@ mod tests {
         assert!(res.is_err());
         assert_eq!(
             res.unwrap_err(),
-            TransactionError::InvalidTx {
+            TransactionError::UnexpectedTx {
                 expected: transaction.tx,
                 got: tx,
             }
@@ -216,7 +216,7 @@ mod tests {
         assert!(res.is_err());
         assert_eq!(
             res.unwrap_err(),
-            TransactionError::InvalidClient {
+            TransactionError::UnexpectedClient {
                 expected: transaction.client,
                 got: client,
             }

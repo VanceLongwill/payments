@@ -2,12 +2,10 @@ extern crate proc_macro;
 
 use anyhow::Result;
 use clap::Clap;
-use csv;
 use rust_decimal::prelude::*;
 use serde::Serialize;
 use std::io;
 use tracing::{debug, error};
-use tracing_subscriber;
 
 mod accounts;
 mod payments;

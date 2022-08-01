@@ -60,7 +60,7 @@ impl Account {
         self.locked == LockedStatus::Locked
     }
     pub fn apply(
-        &self,
+        mut self,
         Transaction {
             kind,
             amount,
@@ -74,38 +74,36 @@ impl Account {
         if self.is_locked() {
             return Err(AccountError::InsufficientFunds);
         }
-        // avoid mutating the account directly
-        let mut acc = self.clone();
         match kind {
             TransactionKind::Deposit { .. } => {
-                acc.available = acc.available + amount;
-                Ok(acc)
+                self.available += amount;
+                Ok(self)
             }
             TransactionKind::Withdrawal { .. } => {
-                let available = acc.available - amount;
+                let available = self.available - amount;
                 if available < Decimal::from(0) {
-                    return Err(AccountError::InsufficientFunds.into());
+                    return Err(AccountError::InsufficientFunds);
                 }
-                acc.available = available;
-                Ok(acc)
+                self.available = available;
+                Ok(self)
             }
             // @TODO: should dispute, resolve & chargeback transactions error when:
             //      a) the resulting available balance would be negative
             //      b) the resulting held balance would be negative ?
             TransactionKind::Dispute => {
-                acc.available = acc.available - amount;
-                acc.held = acc.held + amount;
-                Ok(acc)
+                self.available -= amount;
+                self.held += amount;
+                Ok(self)
             }
             TransactionKind::Resolve => {
-                acc.held = acc.held - amount;
-                acc.available = acc.available + amount;
-                Ok(acc)
+                self.held -= amount;
+                self.available += amount;
+                Ok(self)
             }
             TransactionKind::ChargeBack => {
-                acc.held = acc.held - amount;
-                acc.locked = LockedStatus::Locked;
-                Ok(acc)
+                self.held -= amount;
+                self.locked = LockedStatus::Locked;
+                Ok(self)
             }
         }
     }
