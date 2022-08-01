@@ -2,14 +2,19 @@
 
 Payments system in Rust
 
-- Uses a lightweight DDD (domain driven design) approach. The business logic is
+- Uses a lightweight DDD (domain driven design)/clean architecture approach. The business logic is
 separated into the relevant aggregates and ports in out of the application are contained
 within `main.rs`.
 
-- Makes use of Rust's type system to ensure correctness (see the `TransactionKind` enum)
-
-- Aims to be easily extensible and loosely coupled. The CSV format can be easily changed.
-
+- Makes use of Rust's type system to ensure correctness 
+  + The `TransactionKind` enum is used to track transaction state & prevent invalid transitions.
+  + The entire data model is immutable.
+- Aims to be easily extensible and loosely coupled.
+  + The CSV format can be easily changed.
+  + The storage backend can be easily changed (dependency injection + repository pattern).
+  + Additional aggregates can be added (in addition to transactions & accounts).
+  + Additional transaction types / rules can be implemented without affecting other regions of the code.
+- Structured logging is available via the `tracing` crate (see excerpt below)
 
 ## Running the project
 
@@ -35,5 +40,7 @@ Jul 31 12:02:03.858 DEBUG payments: Unable to process transaction error="unable 
 
 ## TODO:
 
-- Add more tests
+- Implement repositories for another storage backend
 - Limit the serialized `Decimal` precision to 4 decimal places
+- Add metrics (e.g. failed/successful txs, tps)
+- Add concurrency (e.g. shard to tokio threads based on account/transaction id)

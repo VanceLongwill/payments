@@ -21,7 +21,7 @@ impl<'a, 'b> PaymentsEngine<'a, 'b> {
     }
     /// process_transaction attempts to create a transaction event and apply that transaction to
     /// the client account it references
-    pub fn process_transaction(&mut self, t: TransactionCommand) -> Result<()> {
+    pub fn process_transaction(&self, t: TransactionCommand) -> Result<()> {
         let transaction = match self.transactions.get(t.tx)? {
             Some(prev) => prev.apply(t)?,
             None => Transaction::try_from(t)?,
@@ -51,7 +51,7 @@ mod tests {
     fn test_process() -> Result<()> {
         let transactions_repo = TransactionsMemoryRepo::new();
         let accounts_repo = AccountsMemoryRepo::new();
-        let mut engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
+        let engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
         let amount = Decimal::from(99);
         let command = TransactionCommand {
             kind: TransactionKind::Deposit { amount },

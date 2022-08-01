@@ -46,7 +46,7 @@ fn run() -> Result<()> {
     // AccountsRepo/TransactionsRepo traits respectively.
     let transactions_repo = TransactionsMemoryRepo::new();
     let accounts_repo = AccountsMemoryRepo::new();
-    let mut engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
+    let engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
 
     for result in reader.deserialize() {
         let command = result?;

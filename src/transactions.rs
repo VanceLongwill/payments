@@ -66,7 +66,7 @@ pub enum TransactionKind {
     ChargeBack,
 }
 
-/// Transaction represents a valid, processed transaction. A transaction always has a valid amount.
+/// Transaction represents a valid, processed transaction event. A transaction always has a valid amount.
 /// For advanced transactions (disputes, resolves, chargebacks), the amount is taken from the
 /// transaction which the advanced transaction acts upon.
 #[derive(Debug, Clone, Copy)]
