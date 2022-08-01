@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use anyhow::Result;
 use rust_decimal::prelude::*;
 use thiserror::Error;
@@ -14,13 +17,13 @@ pub enum AccountError {
     InvalidInitialTransaction,
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 enum LockedStatus {
     Locked,
     Unlocked,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Account {
     client: u16,
     available: Decimal,
@@ -40,6 +43,9 @@ impl Account {
             }),
             _ => Err(AccountError::InvalidInitialTransaction),
         }
+    }
+    pub fn client(&self) -> u16 {
+        self.client
     }
     pub fn available(&self) -> Decimal {
         self.available
@@ -100,6 +106,39 @@ impl Account {
                 Ok(())
             }
         }
+    }
+}
+
+pub trait AccountsRepo {
+    fn get(&self, id: u16) -> Result<Option<Account>>;
+    fn save(&self, account: Account) -> Result<u16>;
+    fn get_all(&self) -> Result<Vec<Account>>;
+}
+
+pub struct MemoryRepo {
+    data: RefCell<HashMap<u16, Account>>,
+}
+
+impl MemoryRepo {
+    pub fn new() -> MemoryRepo {
+        MemoryRepo {
+            data: RefCell::new(HashMap::new()),
+        }
+    }
+}
+
+impl AccountsRepo for MemoryRepo {
+    fn get(&self, id: u16) -> Result<Option<Account>> {
+        Ok(self.data.borrow().get(&id).cloned())
+    }
+
+    fn save(&self, account: Account) -> Result<u16> {
+        self.data.borrow_mut().insert(account.client, account);
+        Ok(account.client)
+    }
+
+    fn get_all(&self) -> Result<Vec<Account>> {
+        Ok(self.data.borrow().values().cloned().collect())
     }
 }
 

@@ -13,8 +13,9 @@ mod accounts;
 mod payments;
 mod transactions;
 
+use accounts::MemoryRepo as AccountsRepo;
 use payments::PaymentsEngine;
-use transactions::MemoryRepo;
+use transactions::MemoryRepo as TransactionsRepo;
 
 #[derive(Clap)]
 #[clap(version = "0.1.0", author = "Vance Longwill <vancelongwill@gmail.com>")]
@@ -35,8 +36,15 @@ fn run() -> Result<()> {
     let opts: Opts = Opts::parse();
 
     let mut reader = csv::Reader::from_path(opts.file)?;
-    let repo = MemoryRepo::new();
-    let mut engine = PaymentsEngine::new(&repo);
+    // @TODO: as we scale, the in-memory transactions repo might no longer be suitable due to
+    // memory constraints & cold start (loading all transactions that ever occurred into memory
+    // from CSV).
+    //
+    // To mitigate this, the in-memory TransactionsRepo could be swapped out one with a higher
+    // capacity & more durable storage backend such as sqlite, redis, postgres or dynamodb.
+    let transactions_repo = TransactionsRepo::new();
+    let accounts_repo = AccountsRepo::new();
+    let mut engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
 
     for result in reader.deserialize() {
         let command = result?;
@@ -56,9 +64,9 @@ fn run() -> Result<()> {
     }
 
     let mut writer = csv::Writer::from_writer(io::stdout());
-    for (client, acc) in engine.accounts.into_iter() {
+    for acc in engine.accounts.get_all()? {
         writer.serialize(AccountStatement {
-            client,
+            client: acc.client(),
             available: acc.available(),
             held: acc.held(),
             total: acc.total(),

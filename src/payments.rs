@@ -1,20 +1,25 @@
 use anyhow::Result;
-use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use crate::accounts::Account;
+use crate::accounts::{Account, AccountsRepo};
 use crate::transactions::{Transaction, TransactionCommand, TransactionsRepo};
 
-pub struct PaymentsEngine<'a> {
+pub struct PaymentsEngine<'a, 'b> {
     transactions: &'a dyn TransactionsRepo,
-    pub accounts: HashMap<u16, Account>,
+    // @TODO: accounts in-memory hashmap could be replaced with an AccountsRepo backed by a
+    // more durable & higher capacity storage backend with support for a high volume of writes
+    // (such as sqlite, redis, or postgres).
+    pub accounts: &'b dyn AccountsRepo,
 }
 
-impl<'a> PaymentsEngine<'a> {
-    pub fn new(transactions: &dyn TransactionsRepo) -> PaymentsEngine {
+impl<'a, 'b> PaymentsEngine<'a, 'b> {
+    pub fn new(
+        transactions: &'a dyn TransactionsRepo,
+        accounts: &'b dyn AccountsRepo,
+    ) -> PaymentsEngine<'a, 'b> {
         PaymentsEngine {
             transactions,
-            accounts: HashMap::new(),
+            accounts,
         }
     }
     pub fn process_transaction(&mut self, t: TransactionCommand) -> Result<()> {
@@ -23,13 +28,12 @@ impl<'a> PaymentsEngine<'a> {
             None => Transaction::try_from(t)?,
         };
 
-        match self.accounts.get_mut(&transaction.client) {
-            Some(acc) => {
+        match self.accounts.get(transaction.client)? {
+            Some(mut acc) => {
                 acc.apply(transaction)?;
             }
             None => {
-                self.accounts
-                    .insert(transaction.client, Account::new(transaction)?);
+                self.accounts.save(Account::new(transaction)?)?;
             }
         };
 
@@ -40,15 +44,17 @@ impl<'a> PaymentsEngine<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::transactions::{MemoryRepo, TransactionKind};
+    use crate::accounts::MemoryRepo as AccountsMemoryRepo;
+    use crate::transactions::{MemoryRepo as TransactionsMemoryRepo, TransactionKind};
     use rust_decimal::prelude::*;
 
     use super::*;
 
     #[test]
     fn test_process() -> Result<()> {
-        let repo = MemoryRepo::new();
-        let mut engine = PaymentsEngine::new(&repo);
+        let transactions_repo = TransactionsMemoryRepo::new();
+        let accounts_repo = AccountsMemoryRepo::new();
+        let mut engine = PaymentsEngine::new(&transactions_repo, &accounts_repo);
         let amount = Decimal::from(99);
         let command = TransactionCommand {
             kind: TransactionKind::Deposit { amount },
