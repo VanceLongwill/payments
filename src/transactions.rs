@@ -135,16 +135,6 @@ impl MemoryRepo {
             data: RefCell::new(HashMap::new()),
         }
     }
-    /// Retrieves the list of transactions for a given client
-    pub fn get_by_client(&self, client: u16) -> Vec<Transaction> {
-        self.data
-            .borrow()
-            .iter()
-            .map(|(_, transaction)| transaction)
-            .filter(|transaction| transaction.client == client)
-            .cloned()
-            .collect()
-    }
 }
 
 pub trait TransactionsRepo {
