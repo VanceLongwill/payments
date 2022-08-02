@@ -60,7 +60,7 @@ impl Account {
         self.locked == LockedStatus::Locked
     }
     pub fn apply(
-        mut self,
+        &self,
         Transaction {
             kind,
             amount,
@@ -75,36 +75,45 @@ impl Account {
             return Err(AccountError::InsufficientFunds);
         }
         match kind {
-            TransactionKind::Deposit { .. } => {
-                self.available += amount;
-                Ok(self)
-            }
+            TransactionKind::Deposit { .. } => Ok(Account {
+                client,
+                available: self.available + amount,
+                held: self.held,
+                locked: self.locked,
+            }),
             TransactionKind::Withdrawal { .. } => {
                 let available = self.available - amount;
                 if available < Decimal::from(0) {
                     return Err(AccountError::InsufficientFunds);
                 }
-                self.available = available;
-                Ok(self)
+                Ok(Account {
+                    client,
+                    available,
+                    held: self.held,
+                    locked: self.locked,
+                })
             }
             // @TODO: should dispute, resolve & chargeback transactions error when:
             //      a) the resulting available balance would be negative
             //      b) the resulting held balance would be negative ?
-            TransactionKind::Dispute => {
-                self.available -= amount;
-                self.held += amount;
-                Ok(self)
-            }
-            TransactionKind::Resolve => {
-                self.held -= amount;
-                self.available += amount;
-                Ok(self)
-            }
-            TransactionKind::ChargeBack => {
-                self.held -= amount;
-                self.locked = LockedStatus::Locked;
-                Ok(self)
-            }
+            TransactionKind::Dispute => Ok(Account {
+                client,
+                available: self.available - amount,
+                held: self.held + amount,
+                locked: self.locked,
+            }),
+            TransactionKind::Resolve => Ok(Account {
+                client,
+                available: self.available + amount,
+                held: self.held - amount,
+                locked: self.locked,
+            }),
+            TransactionKind::ChargeBack => Ok(Account {
+                client,
+                available: self.available,
+                held: self.held - amount,
+                locked: LockedStatus::Locked,
+            }),
         }
     }
 }
