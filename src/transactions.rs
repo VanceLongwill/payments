@@ -2,12 +2,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use rust_decimal::prelude::*;
 use serde::Deserialize;
 use thiserror::Error;
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug, Clone, Copy, PartialEq)]
 pub enum TransactionError {
     #[error("unable to move transaction from {from:?} to {to:?}")]
     InvalidState {
@@ -20,6 +20,10 @@ pub enum TransactionError {
         "unable to apply transaction with mismatching tx id: expected {expected:?} got {got:?}"
     )]
     UnexpectedTx { expected: u32, got: u32 },
+    #[error("amount cannot be less than zero")]
+    NegativeAmount,
+    #[error("transaction state must begin with deposit or withdrawal")]
+    InvalidInitialState,
 }
 
 /// TransactionCommand represents the minimum fields required for a transaction to be processed.
@@ -34,12 +38,15 @@ pub struct TransactionCommand {
 }
 
 impl TryFrom<TransactionCommand> for Transaction {
-    type Error = anyhow::Error;
+    type Error = TransactionError;
     fn try_from(
         TransactionCommand { kind, tx, client }: TransactionCommand,
-    ) -> Result<Transaction> {
+    ) -> Result<Transaction, Self::Error> {
         match kind {
-            TransactionKind::Deposit { amount } | TransactionKind::Withdrawal { amount } => {
+            TransactionKind::Deposit { amount } => {
+                if amount < Decimal::from(0) {
+                    return Err(TransactionError::NegativeAmount);
+                }
                 Ok(Transaction {
                     tx,
                     amount,
@@ -47,9 +54,18 @@ impl TryFrom<TransactionCommand> for Transaction {
                     client,
                 })
             }
-            _ => Err(anyhow!(
-                "transactions must start with a deposit or withdrawal"
-            )),
+            TransactionKind::Withdrawal { amount } => {
+                if amount < Decimal::from(0) {
+                    return Err(TransactionError::NegativeAmount);
+                }
+                Ok(Transaction {
+                    tx,
+                    amount,
+                    kind,
+                    client,
+                })
+            }
+            _ => Err(TransactionError::InvalidInitialState),
         }
     }
 }
@@ -351,6 +367,67 @@ mod tests {
             assert_eq!(
                 res.unwrap_err(),
                 TransactionError::InvalidState { from, to },
+                "{}",
+                name
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_negative_amount_deposit() -> Result<()> {
+        let amount = Decimal::from(-1);
+
+        let command = TransactionCommand {
+            kind: TransactionKind::Deposit { amount },
+            tx: 1,
+            client: 1,
+        };
+
+        let res = Transaction::try_from(command);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), TransactionError::NegativeAmount);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_negative_amount_withdrawal() -> Result<()> {
+        let amount = Decimal::from(-1);
+
+        let command = TransactionCommand {
+            kind: TransactionKind::Withdrawal { amount },
+            tx: 1,
+            client: 1,
+        };
+
+        let res = Transaction::try_from(command);
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err(), TransactionError::NegativeAmount);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_try_from_invalid() -> Result<()> {
+        let cases = vec![
+            ("dispute", TransactionKind::Dispute),
+            ("resolve", TransactionKind::Resolve),
+            ("chargeback", TransactionKind::ChargeBack),
+        ];
+
+        for (name, kind) in cases {
+            let command = TransactionCommand {
+                kind,
+                tx: 1,
+                client: 1,
+            };
+            let res = Transaction::try_from(command);
+            assert!(res.is_err());
+            assert_eq!(
+                res.unwrap_err(),
+                TransactionError::InvalidInitialState,
                 "{}",
                 name
             );
